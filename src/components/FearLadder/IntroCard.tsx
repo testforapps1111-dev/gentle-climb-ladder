@@ -13,15 +13,14 @@ const LadderIcon = () => (
 
 interface IntroCardProps {
   day: number;
-  onShowExample: () => void;
 }
 
-const IntroCard = ({ day, onShowExample }: IntroCardProps) => {
+const IntroCard = ({ day }: IntroCardProps) => {
   return (
-    <div className="bg-card rounded-xl border border-border p-6 md:p-8">
+    <div className="bg-card rounded-xl border border-border p-6 md:p-8 shadow-sm">
       <div className="flex items-start justify-between mb-4">
         <div className="flex-1" />
-        <span className="text-xs font-medium tracking-wide uppercase text-muted-foreground bg-therapy-soft px-3 py-1 rounded-full">
+        <span className="text-xs font-medium tracking-wide uppercase text-primary bg-therapy-glow px-3 py-1 rounded-full">
           Day {day} Practice
         </span>
       </div>
@@ -45,15 +44,6 @@ const IntroCard = ({ day, onShowExample }: IntroCardProps) => {
             <p>The goal is not to feel calm, but to practice staying present without responding.</p>
           </div>
         </div>
-      </div>
-
-      <div className="flex justify-end mt-6">
-        <button
-          onClick={onShowExample}
-          className="text-sm font-medium text-primary hover:text-primary/80 underline underline-offset-4 transition-colors"
-        >
-          See Example Ladder
-        </button>
       </div>
     </div>
   );

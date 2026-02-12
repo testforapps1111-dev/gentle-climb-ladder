@@ -61,6 +61,10 @@ export default {
           mid: "hsl(var(--therapy-mid))",
           high: "hsl(var(--therapy-high))",
           "ladder-line": "hsl(var(--therapy-ladder-line))",
+          glow: "hsl(var(--therapy-glow))",
+          progress: "hsl(var(--therapy-progress))",
+          "progress-done": "hsl(var(--therapy-progress-done))",
+          "progress-pending": "hsl(var(--therapy-progress-pending))",
         },
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",

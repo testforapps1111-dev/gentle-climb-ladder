@@ -1,4 +1,4 @@
-import { Plus, GripVertical, X } from "lucide-react";
+import { Plus, GripVertical, X, Eye } from "lucide-react";
 
 export interface LadderStep {
   id: string;
@@ -9,9 +9,10 @@ export interface LadderStep {
 interface LadderBuilderProps {
   steps: LadderStep[];
   onStepsChange: (steps: LadderStep[]) => void;
+  onShowExample: () => void;
 }
 
-const LadderBuilder = ({ steps, onStepsChange }: LadderBuilderProps) => {
+const LadderBuilder = ({ steps, onStepsChange, onShowExample }: LadderBuilderProps) => {
   const updateStep = (id: string, field: keyof LadderStep, value: string | number) => {
     onStepsChange(steps.map((s) => (s.id === id ? { ...s, [field]: value } : s)));
   };
@@ -37,14 +38,23 @@ const LadderBuilder = ({ steps, onStepsChange }: LadderBuilderProps) => {
   };
 
   const getAnxietyColor = (val: number) => {
-    if (val <= 30) return "bg-therapy-low";
-    if (val <= 60) return "bg-therapy-mid";
-    return "bg-therapy-high";
+    if (val <= 30) return "bg-therapy-low text-therapy-progress-done";
+    if (val <= 60) return "bg-therapy-mid text-foreground/70";
+    return "bg-therapy-high text-foreground/70";
   };
 
   return (
     <section className="space-y-4">
-      <h2 className="text-xl font-serif font-semibold text-foreground">Build Your Practice Ladder</h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-serif font-semibold text-foreground">Build Your Practice Ladder</h2>
+        <button
+          onClick={onShowExample}
+          className="flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 bg-therapy-glow px-3 py-1.5 rounded-full transition-colors"
+        >
+          <Eye className="w-3.5 h-3.5" />
+          See Example Ladder
+        </button>
+      </div>
       <p className="text-sm text-muted-foreground leading-relaxed">
         Arrange situations from least uncomfortable to most uncomfortable.
         <br />
@@ -61,7 +71,7 @@ const LadderBuilder = ({ steps, onStepsChange }: LadderBuilderProps) => {
               {/* Ladder rung dot */}
               <div className="absolute -left-6 top-5 w-3 h-3 rounded-full border-2 border-therapy-ladder-line bg-card z-10" />
 
-              <div className="bg-card border border-border rounded-lg p-4 space-y-3">
+              <div className="bg-card border border-border rounded-lg p-4 space-y-3 shadow-sm hover:shadow-md transition-shadow">
                 <div className="flex items-start gap-2">
                   <div className="flex flex-col gap-0.5 pt-1">
                     <button
@@ -104,12 +114,13 @@ const LadderBuilder = ({ steps, onStepsChange }: LadderBuilderProps) => {
                         type="range"
                         min="0"
                         max="100"
+                        step="10"
                         value={step.anxiety}
                         onChange={(e) => updateStep(step.id, "anxiety", Number(e.target.value))}
                         className="flex-1 h-1.5 accent-primary cursor-pointer"
                       />
                       <span
-                        className={`text-xs font-medium px-2 py-0.5 rounded-full ${getAnxietyColor(step.anxiety)} text-foreground/70`}
+                        className={`text-xs font-medium px-2 py-0.5 rounded-full ${getAnxietyColor(step.anxiety)}`}
                       >
                         {step.anxiety}
                       </span>
