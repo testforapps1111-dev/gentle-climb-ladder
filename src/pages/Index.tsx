@@ -1,6 +1,9 @@
 import { useState } from "react";
+import { toast } from "sonner";
 import IntroCard from "@/components/FearLadder/IntroCard";
 import PracticeGoal from "@/components/FearLadder/PracticeGoal";
+import { supabase } from "@/integrations/supabase/client";
+import { Button } from "@/components/ui/button";
 import ThoughtSection from "@/components/FearLadder/ThoughtSection";
 import RewardSection from "@/components/FearLadder/RewardSection";
 import LadderBuilder from "@/components/FearLadder/LadderBuilder";
@@ -53,6 +56,31 @@ const Index = () => {
           onStepsChange={(s) => updateField("steps", s)}
           onShowExample={() => setShowExample(true)}
         />
+
+        {/* Save & Begin Practice Button */}
+        <div className="flex justify-center pt-2">
+          <Button
+            size="lg"
+            className="w-full max-w-md"
+            disabled={!data.goal.trim()}
+            onClick={async () => {
+              const { error } = await supabase.from("fear_ladder_sessions").insert({
+                user_id: "test-user",
+                practice_goal: data.goal || null,
+                expected_fear: data.thought || null,
+                reward_plan: data.reward || null,
+              });
+              if (error) {
+                toast.error("Failed to save. Please try again.");
+                console.error(error);
+              } else {
+                toast.success("Day 1 setup saved! Practice begins tomorrow.");
+              }
+            }}
+          >
+            Save &amp; Begin Practice
+          </Button>
+        </div>
 
         <div className="border-t border-border" />
         <ProgressVisual
