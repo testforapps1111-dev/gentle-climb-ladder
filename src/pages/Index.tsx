@@ -89,13 +89,17 @@ const Index = () => {
           currentStepId={todayStep?.id ?? null}
         />
 
-        <div className="border-t border-border" />
-        <TodaysPractice
-          currentDay={currentDay}
-          todayStep={todayStep}
-          todayLog={todayLog}
-          onLogSave={addLog}
-        />
+        {currentDay >= 2 && (
+          <>
+            <div className="border-t border-border" />
+            <TodaysPractice
+              currentDay={currentDay}
+              todayStep={todayStep}
+              todayLog={todayLog}
+              onLogSave={addLog}
+            />
+          </>
+        )}
 
         {/* Footer microcopy */}
         <div className="text-center pb-8">
