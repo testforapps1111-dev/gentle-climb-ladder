@@ -14,32 +14,127 @@ export type Database = {
   }
   public: {
     Tables: {
+      fear_ladder_logs: {
+        Row: {
+          anxiety_after: number | null
+          anxiety_before: number | null
+          created_at: string | null
+          day_number: number
+          id: string
+          notes: string | null
+          session_id: string | null
+          step_id: string | null
+          user_id: string
+        }
+        Insert: {
+          anxiety_after?: number | null
+          anxiety_before?: number | null
+          created_at?: string | null
+          day_number: number
+          id?: string
+          notes?: string | null
+          session_id?: string | null
+          step_id?: string | null
+          user_id: string
+        }
+        Update: {
+          anxiety_after?: number | null
+          anxiety_before?: number | null
+          created_at?: string | null
+          day_number?: number
+          id?: string
+          notes?: string | null
+          session_id?: string | null
+          step_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fear_ladder_logs_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "fear_ladder_sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fear_ladder_logs_step_id_fkey"
+            columns: ["step_id"]
+            isOneToOne: false
+            referencedRelation: "fear_ladder_steps"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       fear_ladder_sessions: {
         Row: {
           created_at: string
+          current_step_index: number | null
           expected_fear: string | null
           id: string
           practice_goal: string | null
           reward_plan: string | null
+          start_date: string | null
           user_id: string | null
         }
         Insert: {
           created_at?: string
+          current_step_index?: number | null
           expected_fear?: string | null
           id?: string
           practice_goal?: string | null
           reward_plan?: string | null
+          start_date?: string | null
           user_id?: string | null
         }
         Update: {
           created_at?: string
+          current_step_index?: number | null
           expected_fear?: string | null
           id?: string
           practice_goal?: string | null
           reward_plan?: string | null
+          start_date?: string | null
           user_id?: string | null
         }
         Relationships: []
+      }
+      fear_ladder_steps: {
+        Row: {
+          anxiety_rating: number
+          created_at: string | null
+          id: string
+          session_id: string | null
+          step_description: string
+          step_order: number
+          user_id: string
+        }
+        Insert: {
+          anxiety_rating: number
+          created_at?: string | null
+          id?: string
+          session_id?: string | null
+          step_description: string
+          step_order: number
+          user_id: string
+        }
+        Update: {
+          anxiety_rating?: number
+          created_at?: string | null
+          id?: string
+          session_id?: string | null
+          step_description?: string
+          step_order?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fear_ladder_steps_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "fear_ladder_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
