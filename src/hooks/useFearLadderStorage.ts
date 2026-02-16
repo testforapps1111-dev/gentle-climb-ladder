@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { LadderStep } from "@/components/FearLadder/LadderBuilder";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -65,7 +65,6 @@ export const getStepForDay = (
 };
 
 async function loadFromSupabase(): Promise<FearLadderData> {
-  // Fetch latest session
   const { data: session, error: sessionError } = await supabase
     .from("fear_ladder_sessions")
     .select("*")
@@ -79,11 +78,8 @@ async function loadFromSupabase(): Promise<FearLadderData> {
     return getDefaultData();
   }
 
-  if (!session) {
-    return getDefaultData();
-  }
+  if (!session) return getDefaultData();
 
-  // Fetch steps and logs in parallel
   const [stepsResult, logsResult] = await Promise.all([
     supabase
       .from("fear_ladder_steps")
@@ -129,8 +125,8 @@ async function loadFromSupabase(): Promise<FearLadderData> {
 export const useFearLadderStorage = () => {
   const [data, setData] = useState<FearLadderData>(getDefaultData);
   const [loading, setLoading] = useState(true);
+  const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
-  // Load from Supabase on mount
   useEffect(() => {
     loadFromSupabase()
       .then((loaded) => setData(loaded))
@@ -140,15 +136,105 @@ export const useFearLadderStorage = () => {
 
   const currentDay = getCurrentDay(data.startDate);
 
+  // Update a field in local state, and sync to Supabase if session exists
   const updateField = useCallback(<K extends keyof FearLadderData>(
     key: K,
     value: FearLadderData[K]
   ) => {
-    setData((prev) => ({ ...prev, [key]: value }));
+    setData((prev) => {
+      const next = { ...prev, [key]: value };
+
+      // If session exists, sync session-level fields to Supabase with debounce
+      if (prev.sessionId && (key === "goal" || key === "thought" || key === "reward")) {
+        const dbField = key === "goal" ? "practice_goal" : key === "thought" ? "expected_fear" : "reward_plan";
+        
+        if (debounceTimers.current[key]) clearTimeout(debounceTimers.current[key]);
+        debounceTimers.current[key] = setTimeout(() => {
+          supabase
+            .from("fear_ladder_sessions")
+            .update({ [dbField]: value as string })
+            .eq("id", prev.sessionId!)
+            .then(({ error }) => {
+              if (error) console.error(`Failed to update ${key}:`, error);
+            });
+        }, 500);
+      }
+
+      return next;
+    });
+  }, []);
+
+  // Update steps with Supabase sync
+  const updateSteps = useCallback((newSteps: LadderStep[]) => {
+    setData((prev) => {
+      if (!prev.sessionId) {
+        return { ...prev, steps: newSteps };
+      }
+
+      const prevIds = new Set(prev.steps.map((s) => s.id));
+      const newIds = new Set(newSteps.map((s) => s.id));
+
+      // Deleted steps (existed before, gone now)
+      const deletedIds = [...prevIds].filter((id) => !newIds.has(id));
+      if (deletedIds.length > 0) {
+        supabase
+          .from("fear_ladder_steps")
+          .delete()
+          .in("id", deletedIds)
+          .then(({ error }) => {
+            if (error) console.error("Failed to delete steps:", error);
+          });
+      }
+
+      // New steps (not in prev)
+      const brandNewSteps = newSteps.filter((s) => !prevIds.has(s.id) && s.situation.trim());
+      if (brandNewSteps.length > 0) {
+        supabase
+          .from("fear_ladder_steps")
+          .insert(
+            brandNewSteps.map((step, idx) => ({
+              id: step.id,
+              session_id: prev.sessionId!,
+              user_id: USER_ID,
+              step_order: newSteps.indexOf(step),
+              step_description: step.situation,
+              anxiety_rating: step.anxiety,
+            }))
+          )
+          .then(({ error }) => {
+            if (error) console.error("Failed to insert new steps:", error);
+          });
+      }
+
+      // Updated steps (existed before and still exist)
+      const updatedSteps = newSteps.filter((s) => prevIds.has(s.id));
+      for (const step of updatedSteps) {
+        const old = prev.steps.find((o) => o.id === step.id);
+        if (old && (old.situation !== step.situation || old.anxiety !== step.anxiety)) {
+          // Debounce per step
+          const timerKey = `step_${step.id}`;
+          if (debounceTimers.current[timerKey]) clearTimeout(debounceTimers.current[timerKey]);
+          debounceTimers.current[timerKey] = setTimeout(() => {
+            supabase
+              .from("fear_ladder_steps")
+              .update({
+                step_description: step.situation,
+                anxiety_rating: step.anxiety,
+                step_order: newSteps.findIndex((s) => s.id === step.id),
+              })
+              .eq("id", step.id)
+              .then(({ error }) => {
+                if (error) console.error(`Failed to update step ${step.id}:`, error);
+              });
+          }, 500);
+        }
+      }
+
+      return { ...prev, steps: newSteps };
+    });
   }, []);
 
   const saveSession = useCallback(async () => {
-    // Insert session
     const { data: session, error: sessionError } = await supabase
       .from("fear_ladder_sessions")
       .insert({
@@ -167,7 +253,6 @@ export const useFearLadderStorage = () => {
 
     const sessionId = session.id;
 
-    // Insert steps
     const filledSteps = data.steps.filter((s) => s.situation.trim().length > 0);
     if (filledSteps.length > 0) {
       const stepsToInsert = filledSteps.map((step, index) => ({
@@ -188,7 +273,6 @@ export const useFearLadderStorage = () => {
         return { success: false as const };
       }
 
-      // Update local state with DB-generated IDs
       if (insertedSteps) {
         const newSteps: LadderStep[] = insertedSteps.map((s) => ({
           id: s.id,
@@ -212,7 +296,6 @@ export const useFearLadderStorage = () => {
         return prev;
       }
 
-      // Fire and forget the insert
       supabase
         .from("fear_ladder_logs")
         .insert({
@@ -251,6 +334,7 @@ export const useFearLadderStorage = () => {
     data,
     currentDay,
     updateField,
+    updateSteps,
     addLog,
     saveSession,
     todayLog,
