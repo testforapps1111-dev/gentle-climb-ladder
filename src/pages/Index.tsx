@@ -17,6 +17,7 @@ const Index = () => {
     data,
     currentDay,
     updateField,
+    updateSteps,
     addLog,
     saveSession,
     todayLog,
@@ -62,7 +63,7 @@ const Index = () => {
         <div className="border-t border-border" />
         <LadderBuilder
           steps={data.steps}
-          onStepsChange={(s) => updateField("steps", s)}
+          onStepsChange={updateSteps}
           onShowExample={() => setShowExample(true)}
         />
 
@@ -72,7 +73,7 @@ const Index = () => {
             <Button
               size="lg"
               className="w-full max-w-md"
-              disabled={!data.goal.trim()}
+              disabled={!data.goal.trim() || !data.thought.trim() || !data.reward.trim() || !data.steps.some(s => s.situation.trim())}
               onClick={async () => {
                 const result = await saveSession();
                 if (result.success) {
