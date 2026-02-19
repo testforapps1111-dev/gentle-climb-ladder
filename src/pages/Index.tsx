@@ -87,7 +87,7 @@ const Index = () => {
       <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
         <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin mb-4" />
         <p className="text-sm text-muted-foreground font-medium animate-pulse text-center max-w-xs">
-          Securing your therapeutic session...
+          Your courage journey continues...
         </p>
       </div>
     );
