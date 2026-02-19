@@ -6,50 +6,50 @@
 
 @layer base {
   :root {
-    --background: 36 25% 96%;
-    --foreground: 220 20% 18%;
+    --background: 160 30% 97%;
+    --foreground: 200 20% 18%;
 
-    --card: 38 30% 97%;
-    --card-foreground: 220 20% 18%;
+    --card: 160 25% 98%;
+    --card-foreground: 200 20% 18%;
 
-    --popover: 40 30% 99%;
-    --popover-foreground: 220 20% 18%;
+    --popover: 160 20% 99%;
+    --popover-foreground: 200 20% 18%;
 
-    --primary: 174 42% 42%;
+    --primary: 174 50% 40%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 36 25% 91%;
-    --secondary-foreground: 220 15% 30%;
+    --secondary: 160 20% 92%;
+    --secondary-foreground: 200 15% 30%;
 
-    --muted: 36 18% 93%;
-    --muted-foreground: 220 10% 46%;
+    --muted: 160 15% 93%;
+    --muted-foreground: 200 10% 46%;
 
     --accent: 174 30% 90%;
-    --accent-foreground: 174 35% 25%;
+    --accent-foreground: 174 40% 22%;
 
-    --destructive: 0 55% 52%;
+    --destructive: 15 50% 50%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 36 20% 88%;
-    --input: 36 20% 88%;
-    --ring: 174 42% 42%;
+    --border: 160 18% 88%;
+    --input: 160 18% 88%;
+    --ring: 174 50% 40%;
 
-    --radius: 0.75rem;
+    --radius: 1.25rem;
 
-    /* Therapeutic palette - warm & peaceful */
-    --therapy-soft: 36 30% 94%;
-    --therapy-card: 38 28% 96%;
+    /* Therapeutic palette - mint & teal */
+    --therapy-soft: 160 25% 95%;
+    --therapy-card: 160 22% 97%;
     --therapy-accent: 174 28% 88%;
-    --therapy-warm: 28 45% 91%;
-    --therapy-success: 160 35% 42%;
-    --therapy-low: 160 30% 90%;
-    --therapy-mid: 36 35% 85%;
-    --therapy-high: 15 40% 80%;
-    --therapy-ladder-line: 174 25% 78%;
-    --therapy-glow: 174 40% 92%;
-    --therapy-progress: 174 42% 42%;
-    --therapy-progress-done: 160 35% 42%;
-    --therapy-progress-pending: 36 20% 88%;
+    --therapy-warm: 160 20% 92%;
+    --therapy-success: 174 50% 40%;
+    --therapy-low: 160 30% 92%;
+    --therapy-mid: 170 25% 85%;
+    --therapy-high: 174 20% 78%;
+    --therapy-ladder-line: 174 30% 78%;
+    --therapy-glow: 160 35% 94%;
+    --therapy-progress: 174 50% 40%;
+    --therapy-progress-done: 174 45% 38%;
+    --therapy-progress-pending: 160 18% 88%;
 
     --sidebar-background: 0 0% 98%;
     --sidebar-foreground: 240 5.3% 26.1%;
@@ -112,11 +112,28 @@
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply text-foreground;
     font-family: 'DM Sans', sans-serif;
+    background: linear-gradient(180deg, hsl(160 30% 97%) 0%, hsl(165 35% 95%) 100%);
+    min-height: 100vh;
   }
 
   h1, h2, h3, h4, h5, h6 {
     font-family: 'Fraunces', serif;
   }
+}
+
+@keyframes confetti {
+  0% {
+    transform: translateY(0) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(400px) rotate(720deg);
+    opacity: 0;
+  }
+}
+
+.animate-confetti {
+  animation: confetti 2.5s ease-out forwards;
 }

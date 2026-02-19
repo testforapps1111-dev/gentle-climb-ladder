@@ -19,7 +19,6 @@ export interface FearLadderData {
   thought: string;
   reward: string;
   steps: LadderStep[];
-  startDate: string;
   logs: DayLog[];
 }
 
@@ -35,34 +34,9 @@ const getDefaultData = (): FearLadderData => ({
   goal: "",
   thought: "",
   reward: "",
-  steps: createEmptySteps(5),
-  startDate: new Date().toISOString().split("T")[0],
+  steps: createEmptySteps(10),
   logs: [],
 });
-
-export const getCurrentDay = (startDate: string): number => {
-  const start = new Date(startDate + "T00:00:00");
-  const now = new Date();
-  const diff = Math.floor((now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-  return Math.max(1, diff + 1);
-};
-
-export const getStepForDay = (
-  steps: LadderStep[],
-  logs: DayLog[],
-  day: number
-): LadderStep | null => {
-  if (day <= 1) return null;
-  const filledSteps = steps
-    .filter((s) => s.situation.trim().length > 0)
-    .sort((a, b) => a.anxiety - b.anxiety);
-
-  if (filledSteps.length === 0) return null;
-
-  const practiceIndex = day - 2;
-  const stepIndex = practiceIndex % filledSteps.length;
-  return filledSteps[stepIndex];
-};
 
 async function loadFromSupabase(): Promise<FearLadderData> {
   const { data: session, error: sessionError } = await supabase
@@ -116,15 +90,17 @@ async function loadFromSupabase(): Promise<FearLadderData> {
     goal: session.practice_goal ?? "",
     thought: session.expected_fear ?? "",
     reward: session.reward_plan ?? "",
-    steps: steps.length > 0 ? steps : createEmptySteps(5),
-    startDate: session.start_date ?? new Date().toISOString().split("T")[0],
+    steps: steps.length > 0 ? steps : createEmptySteps(10),
     logs,
   };
 }
 
+export type AppPhase = "build" | "practice" | "completed";
+
 export const useFearLadderStorage = () => {
   const [data, setData] = useState<FearLadderData>(getDefaultData);
   const [loading, setLoading] = useState(true);
+  const [justSaved, setJustSaved] = useState(false);
   const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   useEffect(() => {
@@ -134,9 +110,32 @@ export const useFearLadderStorage = () => {
       .finally(() => setLoading(false));
   }, []);
 
-  const currentDay = getCurrentDay(data.startDate);
+  const completedCount = data.logs.length;
 
-  // Update a field in local state, and sync to Supabase if session exists
+  // Determine phase
+  const phase: AppPhase = !data.sessionId
+    ? "build"
+    : completedCount >= 10
+    ? "completed"
+    : "practice";
+
+  // Sorted steps by anxiety (low to high)
+  const sortedSteps = data.steps
+    .filter((s) => s.situation.trim().length > 0)
+    .sort((a, b) => a.anxiety - b.anxiety);
+
+  // Current step is based on completedCount
+  const currentStep = completedCount < sortedSteps.length ? sortedSteps[completedCount] : null;
+
+  // Completed step IDs from logs
+  const completedStepIds = new Set(data.logs.map((l) => l.stepId));
+
+  // Check if current step already has a log (prevent duplicates)
+  const currentStepAlreadyLogged = currentStep
+    ? data.logs.some((l) => l.stepId === currentStep.id)
+    : false;
+
+  // Update local field
   const updateField = useCallback(<K extends keyof FearLadderData>(
     key: K,
     value: FearLadderData[K]
@@ -144,10 +143,8 @@ export const useFearLadderStorage = () => {
     setData((prev) => {
       const next = { ...prev, [key]: value };
 
-      // If session exists, sync session-level fields to Supabase with debounce
       if (prev.sessionId && (key === "goal" || key === "thought" || key === "reward")) {
         const dbField = key === "goal" ? "practice_goal" : key === "thought" ? "expected_fear" : "reward_plan";
-        
         if (debounceTimers.current[key]) clearTimeout(debounceTimers.current[key]);
         debounceTimers.current[key] = setTimeout(() => {
           supabase
@@ -164,76 +161,12 @@ export const useFearLadderStorage = () => {
     });
   }, []);
 
-  // Update steps with Supabase sync
+  // Update steps (only in build phase)
   const updateSteps = useCallback((newSteps: LadderStep[]) => {
-    setData((prev) => {
-      if (!prev.sessionId) {
-        return { ...prev, steps: newSteps };
-      }
-
-      const prevIds = new Set(prev.steps.map((s) => s.id));
-      const newIds = new Set(newSteps.map((s) => s.id));
-
-      // Deleted steps (existed before, gone now)
-      const deletedIds = [...prevIds].filter((id) => !newIds.has(id));
-      if (deletedIds.length > 0) {
-        supabase
-          .from("fear_ladder_steps")
-          .delete()
-          .in("id", deletedIds)
-          .then(({ error }) => {
-            if (error) console.error("Failed to delete steps:", error);
-          });
-      }
-
-      // New steps (not in prev)
-      const brandNewSteps = newSteps.filter((s) => !prevIds.has(s.id) && s.situation.trim());
-      if (brandNewSteps.length > 0) {
-        supabase
-          .from("fear_ladder_steps")
-          .insert(
-            brandNewSteps.map((step, idx) => ({
-              id: step.id,
-              session_id: prev.sessionId!,
-              user_id: USER_ID,
-              step_order: newSteps.indexOf(step),
-              step_description: step.situation,
-              anxiety_rating: step.anxiety,
-            }))
-          )
-          .then(({ error }) => {
-            if (error) console.error("Failed to insert new steps:", error);
-          });
-      }
-
-      // Updated steps (existed before and still exist)
-      const updatedSteps = newSteps.filter((s) => prevIds.has(s.id));
-      for (const step of updatedSteps) {
-        const old = prev.steps.find((o) => o.id === step.id);
-        if (old && (old.situation !== step.situation || old.anxiety !== step.anxiety)) {
-          // Debounce per step
-          const timerKey = `step_${step.id}`;
-          if (debounceTimers.current[timerKey]) clearTimeout(debounceTimers.current[timerKey]);
-          debounceTimers.current[timerKey] = setTimeout(() => {
-            supabase
-              .from("fear_ladder_steps")
-              .update({
-                step_description: step.situation,
-                anxiety_rating: step.anxiety,
-                step_order: newSteps.findIndex((s) => s.id === step.id),
-              })
-              .eq("id", step.id)
-              .then(({ error }) => {
-                if (error) console.error(`Failed to update step ${step.id}:`, error);
-              });
-          }, 500);
-        }
-      }
-
-      return { ...prev, steps: newSteps };
-    });
+    setData((prev) => ({ ...prev, steps: newSteps }));
   }, []);
 
+  // Save session + steps to Supabase
   const saveSession = useCallback(async () => {
     const { data: session, error: sessionError } = await supabase
       .from("fear_ladder_sessions")
@@ -252,20 +185,20 @@ export const useFearLadderStorage = () => {
     }
 
     const sessionId = session.id;
-
     const filledSteps = data.steps.filter((s) => s.situation.trim().length > 0);
-    if (filledSteps.length > 0) {
-      const stepsToInsert = filledSteps.map((step, index) => ({
-        session_id: sessionId,
-        user_id: USER_ID,
-        step_order: index,
-        step_description: step.situation,
-        anxiety_rating: step.anxiety,
-      }));
 
+    if (filledSteps.length > 0) {
       const { data: insertedSteps, error: stepsError } = await supabase
         .from("fear_ladder_steps")
-        .insert(stepsToInsert)
+        .insert(
+          filledSteps.map((step, index) => ({
+            session_id: sessionId,
+            user_id: USER_ID,
+            step_order: index,
+            step_description: step.situation,
+            anxiety_rating: step.anxiety,
+          }))
+        )
         .select("id, step_order, step_description, anxiety_rating");
 
       if (stepsError) {
@@ -285,63 +218,67 @@ export const useFearLadderStorage = () => {
       setData((prev) => ({ ...prev, sessionId }));
     }
 
+    setJustSaved(true);
     return { success: true as const };
   }, [data.goal, data.thought, data.reward, data.steps]);
 
+  // Add practice log
   const addLog = useCallback(async (log: DayLog) => {
-    setData((prev) => {
-      const sessionId = prev.sessionId;
-      if (!sessionId) {
-        console.error("Cannot log practice: no active session");
-        return prev;
-      }
+    if (!data.sessionId) {
+      console.error("Cannot log practice: no active session");
+      return { success: false as const };
+    }
 
-      supabase
-        .from("fear_ladder_logs")
-        .insert({
-          session_id: sessionId,
-          step_id: log.stepId || null,
-          user_id: USER_ID,
-          day_number: log.day,
-          anxiety_before: log.anxietyBefore,
-          anxiety_after: log.anxietyAfter,
-          notes: log.notes || null,
-        })
-        .then(({ error }) => {
-          if (error) console.error("Failed to save log:", error);
-        });
+    // Prevent duplicate for same step
+    if (data.logs.some((l) => l.stepId === log.stepId)) {
+      console.warn("Log already exists for this step");
+      return { success: false as const };
+    }
 
-      return {
-        ...prev,
-        logs: [...prev.logs, log],
-      };
+    const { error } = await supabase.from("fear_ladder_logs").insert({
+      session_id: data.sessionId,
+      step_id: log.stepId || null,
+      user_id: USER_ID,
+      day_number: log.day,
+      anxiety_before: log.anxietyBefore,
+      anxiety_after: log.anxietyAfter,
+      notes: log.notes || null,
     });
+
+    if (error) {
+      console.error("Failed to save log:", error);
+      return { success: false as const };
+    }
+
+    setData((prev) => ({
+      ...prev,
+      logs: [...prev.logs, log],
+    }));
+
+    return { success: true as const };
+  }, [data.sessionId, data.logs]);
+
+  // Reset for new ladder
+  const resetLadder = useCallback(() => {
+    setData(getDefaultData());
+    setJustSaved(false);
   }, []);
-
-  const todayLog = data.logs.find((l) => l.day === currentDay);
-  const todayStep = getStepForDay(data.steps, data.logs, currentDay);
-
-  const sortedFilledSteps = data.steps
-    .filter((s) => s.situation.trim().length > 0)
-    .sort((a, b) => a.anxiety - b.anxiety);
-
-  const completedStepIds = new Set(data.logs.map((l) => l.stepId));
-  const currentStepIndex = todayStep
-    ? sortedFilledSteps.findIndex((s) => s.id === todayStep.id)
-    : -1;
 
   return {
     data,
-    currentDay,
+    phase,
+    completedCount,
+    sortedSteps,
+    currentStep,
+    completedStepIds,
+    currentStepAlreadyLogged,
     updateField,
     updateSteps,
-    addLog,
     saveSession,
-    todayLog,
-    todayStep,
-    sortedFilledSteps,
-    completedStepIds,
-    currentStepIndex,
+    addLog,
+    resetLadder,
+    justSaved,
+    setJustSaved,
     loading,
   };
 };
