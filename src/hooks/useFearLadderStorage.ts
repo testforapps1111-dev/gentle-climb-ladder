@@ -112,17 +112,17 @@ export const useFearLadderStorage = () => {
 
   const completedCount = data.logs.length;
 
-  // Determine phase
-  const phase: AppPhase = !data.sessionId
-    ? "build"
-    : completedCount >= 10
-    ? "completed"
-    : "practice";
-
   // Sorted steps by anxiety (low to high)
   const sortedSteps = data.steps
     .filter((s) => s.situation.trim().length > 0)
     .sort((a, b) => a.anxiety - b.anxiety);
+
+  // Determine phase — if session exists but has no steps, stay in build
+  const phase: AppPhase = !data.sessionId || (sortedSteps.length === 0 && completedCount === 0)
+    ? "build"
+    : completedCount >= sortedSteps.length && sortedSteps.length > 0
+    ? "completed"
+    : "practice";
 
   // Current step is based on completedCount
   const currentStep = completedCount < sortedSteps.length ? sortedSteps[completedCount] : null;
