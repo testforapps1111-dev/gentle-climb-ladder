@@ -14,6 +14,7 @@ const Index = () => {
   const [showExample, setShowExample] = useState(false);
   const [showReview, setShowReview] = useState(false);
   const [isAuthenticating, setIsAuthenticating] = useState(true);
+  const [userId, setUserId] = useState<string | null>(sessionStorage.getItem("user_id"));
 
   // ============ HANDSHAKE AUTH PROTOCOL ============
   useEffect(() => {
@@ -35,7 +36,9 @@ const Index = () => {
             const userData = await response.json();
             // 2. Store user_id in sessionStorage (Session Isolation)
             // Note: user_id is treated as a BIGINT/string source of truth
-            sessionStorage.setItem("user_id", userData.user_id.toString());
+            const id = userData.user_id.toString();
+            sessionStorage.setItem("user_id", id);
+            setUserId(id);
 
             // 3. Clean URL without refreshing
             const originalUrl = window.location.origin + window.location.pathname;
@@ -53,6 +56,7 @@ const Index = () => {
         // 4. Handle Missing Token
         const existingUser = sessionStorage.getItem("user_id");
         if (existingUser) {
+          setUserId(existingUser);
           setIsAuthenticating(false);
         } else {
           // 5. Production Redirect (No token and no session)
@@ -80,7 +84,7 @@ const Index = () => {
     justSaved,
     setJustSaved,
     loading,
-  } = useFearLadderStorage();
+  } = useFearLadderStorage(userId);
 
   if (loading || isAuthenticating) {
     return (

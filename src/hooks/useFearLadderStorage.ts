@@ -10,8 +10,6 @@ const getUserId = (): string | null => {
   return null;
 };
 
-const USER_ID = getUserId();
-
 export interface DayLog {
   day: number;
   stepId: string;
@@ -46,13 +44,13 @@ const getDefaultData = (): FearLadderData => ({
   logs: [],
 });
 
-async function loadFromSupabase(): Promise<FearLadderData> {
-  if (!USER_ID) return getDefaultData();
+async function loadFromSupabase(userId: string | null): Promise<FearLadderData> {
+  if (!userId) return getDefaultData();
 
   const { data: session, error: sessionError } = await supabase
     .from("fear_ladder_sessions")
     .select("*")
-    .eq("user_id", USER_ID)
+    .eq("user_id", userId)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -69,13 +67,13 @@ async function loadFromSupabase(): Promise<FearLadderData> {
       .from("fear_ladder_steps")
       .select("*")
       .eq("session_id", session.id)
-      .eq("user_id", USER_ID)
+      .eq("user_id", userId)
       .order("step_order", { ascending: true }),
     supabase
       .from("fear_ladder_logs")
       .select("*")
       .eq("session_id", session.id)
-      .eq("user_id", USER_ID)
+      .eq("user_id", userId)
       .order("day_number", { ascending: true }),
   ]);
 
@@ -109,18 +107,25 @@ async function loadFromSupabase(): Promise<FearLadderData> {
 
 export type AppPhase = "build" | "practice" | "completed";
 
-export const useFearLadderStorage = () => {
+export const useFearLadderStorage = (userId: string | null) => {
   const [data, setData] = useState<FearLadderData>(getDefaultData);
   const [loading, setLoading] = useState(true);
   const [justSaved, setJustSaved] = useState(false);
   const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
+  // Reload when userId changes
   useEffect(() => {
-    loadFromSupabase()
-      .then((loaded) => setData(loaded))
-      .catch((err) => console.error("Failed to load fear ladder data:", err))
-      .finally(() => setLoading(false));
-  }, []);
+    if (userId) {
+      setLoading(true);
+      loadFromSupabase(userId)
+        .then((loaded) => setData(loaded))
+        .catch((err) => console.error("Failed to load fear ladder data:", err))
+        .finally(() => setLoading(false));
+    } else {
+      setData(getDefaultData());
+      setLoading(false);
+    }
+  }, [userId]);
 
   const completedCount = data.logs.length;
 
@@ -151,10 +156,11 @@ export const useFearLadderStorage = () => {
         sortedStepsCount: sortedSteps.length,
         completedCount,
         currentStep: currentStep?.situation,
-        justSaved
+        justSaved,
+        userId
       });
     }
-  }, [loading, data.sessionId, phase, data.steps.length, sortedSteps.length, completedCount, currentStep?.situation, justSaved]);
+  }, [loading, data.sessionId, phase, data.steps.length, sortedSteps.length, completedCount, currentStep?.situation, justSaved, userId]);
 
   // Completed step IDs from logs
   const completedStepIds = new Set(data.logs.map((l) => l.stepId));
@@ -192,6 +198,8 @@ export const useFearLadderStorage = () => {
 
   // Save session + steps to Supabase
   const saveSession = useCallback(async () => {
+    if (!userId) return { success: false as const, error: "Authentication required." };
+
     const filledSteps = data.steps
       .filter((s) => s.situation.trim().length > 0)
       .sort((a, b) => a.anxiety - b.anxiety);
@@ -202,7 +210,7 @@ export const useFearLadderStorage = () => {
 
     // Ensure the user exists in the BIGINT 'users' table (required for foreign keys)
     const { error: userError } = await (supabase.from as any)("users")
-      .upsert({ id: USER_ID }, { onConflict: "id" });
+      .upsert({ id: userId }, { onConflict: "id" });
 
     if (userError) {
       console.error("Failed to initialize user record:", userError);
@@ -212,7 +220,7 @@ export const useFearLadderStorage = () => {
     const { data: session, error: sessionError } = await supabase
       .from("fear_ladder_sessions")
       .insert({
-        user_id: USER_ID,
+        user_id: userId,
         practice_goal: data.goal || null,
         expected_fear: data.thought || null,
         reward_plan: data.reward || null,
@@ -232,7 +240,7 @@ export const useFearLadderStorage = () => {
       .insert(
         filledSteps.map((step, index) => ({
           session_id: sessionId,
-          user_id: USER_ID,
+          user_id: userId,
           step_order: index,
           step_description: step.situation,
           anxiety_rating: step.anxiety,
@@ -262,11 +270,11 @@ export const useFearLadderStorage = () => {
     }
 
     return { success: false as const };
-  }, [data.goal, data.thought, data.reward, data.steps]);
+  }, [data.goal, data.thought, data.reward, data.steps, userId]);
 
   // Add practice log
   const addLog = useCallback(async (log: DayLog) => {
-    if (!data.sessionId) return { success: false as const };
+    if (!userId || !data.sessionId) return { success: false as const };
 
     if (data.logs.some((l) => l.stepId === log.stepId)) {
       return { success: false as const };
@@ -275,7 +283,7 @@ export const useFearLadderStorage = () => {
     const { error } = await supabase.from("fear_ladder_logs").insert({
       session_id: data.sessionId,
       step_id: log.stepId || null,
-      user_id: USER_ID,
+      user_id: userId,
       day_number: log.day,
       anxiety_before: log.anxietyBefore,
       anxiety_after: log.anxietyAfter,
@@ -293,7 +301,7 @@ export const useFearLadderStorage = () => {
     }));
 
     return { success: true as const };
-  }, [data.sessionId, data.logs]);
+  }, [data.sessionId, data.logs, userId]);
 
   // RESET FOR TESTING: Clears local state and re-triggers build phase
   const resetLadder = useCallback(async () => {
