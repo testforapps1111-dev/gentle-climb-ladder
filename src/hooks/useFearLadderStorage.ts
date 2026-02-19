@@ -1,8 +1,16 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { LadderStep } from "@/components/FearLadder/LadderBuilder";
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
-const USER_ID = "test-user";
+const getUserId = (): string | null => {
+  if (typeof window !== "undefined") {
+    return sessionStorage.getItem("user_id");
+  }
+  return null;
+};
+
+const USER_ID = getUserId();
 
 export interface DayLog {
   day: number;
@@ -24,7 +32,7 @@ export interface FearLadderData {
 
 const createEmptySteps = (count: number): LadderStep[] =>
   Array.from({ length: count }, () => ({
-    id: crypto.randomUUID(),
+    id: Math.random().toString(36).substring(2, 9),
     situation: "",
     anxiety: 50,
   }));
@@ -39,6 +47,8 @@ const getDefaultData = (): FearLadderData => ({
 });
 
 async function loadFromSupabase(): Promise<FearLadderData> {
+  if (!USER_ID) return getDefaultData();
+
   const { data: session, error: sessionError } = await supabase
     .from("fear_ladder_sessions")
     .select("*")
@@ -59,11 +69,13 @@ async function loadFromSupabase(): Promise<FearLadderData> {
       .from("fear_ladder_steps")
       .select("*")
       .eq("session_id", session.id)
+      .eq("user_id", USER_ID)
       .order("step_order", { ascending: true }),
     supabase
       .from("fear_ladder_logs")
       .select("*")
       .eq("session_id", session.id)
+      .eq("user_id", USER_ID)
       .order("day_number", { ascending: true }),
   ]);
 
@@ -113,19 +125,36 @@ export const useFearLadderStorage = () => {
   const completedCount = data.logs.length;
 
   // Sorted steps by anxiety (low to high)
-  const sortedSteps = data.steps
+  const sortedSteps = [...data.steps]
     .filter((s) => s.situation.trim().length > 0)
     .sort((a, b) => a.anxiety - b.anxiety);
 
-  // Determine phase — if session exists but has no steps, stay in build
-  const phase: AppPhase = !data.sessionId || (sortedSteps.length === 0 && completedCount === 0)
+  // Determine phase — STRICT and STABLE
+  // Phase is build if NO session exists. Period.
+  const phase: AppPhase = !data.sessionId
     ? "build"
-    : completedCount >= sortedSteps.length && sortedSteps.length > 0
-    ? "completed"
-    : "practice";
+    : completedCount >= sortedSteps.length
+      ? "completed"
+      : "practice";
 
-  // Current step is based on completedCount
-  const currentStep = completedCount < sortedSteps.length ? sortedSteps[completedCount] : null;
+  // Current step is the next one to practice, only relevant in practice phase
+  const currentStep = (phase === "practice" && completedCount < sortedSteps.length)
+    ? sortedSteps[completedCount]
+    : null;
+
+  useEffect(() => {
+    if (!loading) {
+      console.log("Fear Ladder State:", {
+        sessionId: data.sessionId,
+        phase,
+        stepsCount: data.steps.length,
+        sortedStepsCount: sortedSteps.length,
+        completedCount,
+        currentStep: currentStep?.situation,
+        justSaved
+      });
+    }
+  }, [loading, data.sessionId, phase, data.steps.length, sortedSteps.length, completedCount, currentStep?.situation, justSaved]);
 
   // Completed step IDs from logs
   const completedStepIds = new Set(data.logs.map((l) => l.stepId));
@@ -141,33 +170,45 @@ export const useFearLadderStorage = () => {
     value: FearLadderData[K]
   ) => {
     setData((prev) => {
-      const next = { ...prev, [key]: value };
-
-      if (prev.sessionId && (key === "goal" || key === "thought" || key === "reward")) {
-        const dbField = key === "goal" ? "practice_goal" : key === "thought" ? "expected_fear" : "reward_plan";
-        if (debounceTimers.current[key]) clearTimeout(debounceTimers.current[key]);
-        debounceTimers.current[key] = setTimeout(() => {
-          supabase
-            .from("fear_ladder_sessions")
-            .update({ [dbField]: value as string })
-            .eq("id", prev.sessionId!)
-            .then(({ error }) => {
-              if (error) console.error(`Failed to update ${key}:`, error);
-            });
-        }, 500);
+      // Allow editing anytime if in build phase
+      if (!prev.sessionId) {
+        return { ...prev, [key]: value };
       }
-
-      return next;
+      // Immutable after build is done
+      if (key === "goal" || key === "thought" || key === "reward") {
+        return prev;
+      }
+      return { ...prev, [key]: value };
     });
   }, []);
 
   // Update steps (only in build phase)
   const updateSteps = useCallback((newSteps: LadderStep[]) => {
-    setData((prev) => ({ ...prev, steps: newSteps }));
+    setData((prev) => {
+      if (prev.sessionId) return prev; // Immutable after build is done
+      return { ...prev, steps: newSteps };
+    });
   }, []);
 
   // Save session + steps to Supabase
   const saveSession = useCallback(async () => {
+    const filledSteps = data.steps
+      .filter((s) => s.situation.trim().length > 0)
+      .sort((a, b) => a.anxiety - b.anxiety);
+
+    if (filledSteps.length < 1) {
+      return { success: false as const, error: "Please add at least one step." };
+    }
+
+    // Ensure the user exists in the BIGINT 'users' table (required for foreign keys)
+    const { error: userError } = await (supabase.from as any)("users")
+      .upsert({ id: USER_ID }, { onConflict: "id" });
+
+    if (userError) {
+      console.error("Failed to initialize user record:", userError);
+      return { success: false as const };
+    }
+
     const { data: session, error: sessionError } = await supabase
       .from("fear_ladder_sessions")
       .insert({
@@ -185,53 +226,49 @@ export const useFearLadderStorage = () => {
     }
 
     const sessionId = session.id;
-    const filledSteps = data.steps.filter((s) => s.situation.trim().length > 0);
 
-    if (filledSteps.length > 0) {
-      const { data: insertedSteps, error: stepsError } = await supabase
-        .from("fear_ladder_steps")
-        .insert(
-          filledSteps.map((step, index) => ({
-            session_id: sessionId,
-            user_id: USER_ID,
-            step_order: index,
-            step_description: step.situation,
-            anxiety_rating: step.anxiety,
-          }))
-        )
-        .select("id, step_order, step_description, anxiety_rating");
+    const { data: insertedSteps, error: stepsError } = await supabase
+      .from("fear_ladder_steps")
+      .insert(
+        filledSteps.map((step, index) => ({
+          session_id: sessionId,
+          user_id: USER_ID,
+          step_order: index,
+          step_description: step.situation,
+          anxiety_rating: step.anxiety,
+        }))
+      )
+      .select("id, step_order, step_description, anxiety_rating");
 
-      if (stepsError) {
-        console.error("Failed to save steps:", stepsError);
-        return { success: false as const };
-      }
-
-      if (insertedSteps) {
-        const newSteps: LadderStep[] = insertedSteps.map((s) => ({
-          id: s.id,
-          situation: s.step_description,
-          anxiety: s.anxiety_rating,
-        }));
-        setData((prev) => ({ ...prev, sessionId, steps: newSteps }));
-      }
-    } else {
-      setData((prev) => ({ ...prev, sessionId }));
+    if (stepsError) {
+      console.error("Failed to save steps:", stepsError);
+      return { success: false as const };
     }
 
-    setJustSaved(true);
-    return { success: true as const };
+    if (insertedSteps) {
+      const newSteps: LadderStep[] = insertedSteps.map((s) => ({
+        id: s.id,
+        situation: s.step_description,
+        anxiety: s.anxiety_rating,
+      }));
+      setData((prev) => ({
+        ...prev,
+        sessionId,
+        steps: newSteps,
+        logs: [] // Reset logs just in case of stale data
+      }));
+      setJustSaved(true);
+      return { success: true as const };
+    }
+
+    return { success: false as const };
   }, [data.goal, data.thought, data.reward, data.steps]);
 
   // Add practice log
   const addLog = useCallback(async (log: DayLog) => {
-    if (!data.sessionId) {
-      console.error("Cannot log practice: no active session");
-      return { success: false as const };
-    }
+    if (!data.sessionId) return { success: false as const };
 
-    // Prevent duplicate for same step
     if (data.logs.some((l) => l.stepId === log.stepId)) {
-      console.warn("Log already exists for this step");
       return { success: false as const };
     }
 
@@ -258,10 +295,11 @@ export const useFearLadderStorage = () => {
     return { success: true as const };
   }, [data.sessionId, data.logs]);
 
-  // Reset for new ladder
-  const resetLadder = useCallback(() => {
+  // RESET FOR TESTING: Clears local state and re-triggers build phase
+  const resetLadder = useCallback(async () => {
     setData(getDefaultData());
     setJustSaved(false);
+    toast.success("Flow reset. You are now back on Day 1.");
   }, []);
 
   return {
@@ -282,3 +320,4 @@ export const useFearLadderStorage = () => {
     loading,
   };
 };
+

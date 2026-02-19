@@ -1,4 +1,4 @@
-import { Plus, GripVertical, X, Eye } from "lucide-react";
+import { GripVertical, Eye } from "lucide-react";
 
 export interface LadderStep {
   id: string;
@@ -15,18 +15,6 @@ interface LadderBuilderProps {
 const LadderBuilder = ({ steps, onStepsChange, onShowExample }: LadderBuilderProps) => {
   const updateStep = (id: string, field: keyof LadderStep, value: string | number) => {
     onStepsChange(steps.map((s) => (s.id === id ? { ...s, [field]: value } : s)));
-  };
-
-  const addStep = () => {
-    onStepsChange([
-      ...steps,
-      { id: crypto.randomUUID(), situation: "", anxiety: 50 },
-    ]);
-  };
-
-  const removeStep = (id: string) => {
-    if (steps.length <= 1) return;
-    onStepsChange(steps.filter((s) => s.id !== id));
   };
 
   const moveStep = (index: number, direction: "up" | "down") => {
@@ -98,10 +86,10 @@ const LadderBuilder = ({ steps, onStepsChange, onShowExample }: LadderBuilderPro
                           idx === 0
                             ? "Touching a public door handle"
                             : idx === 1
-                            ? "Shaking hands with a stranger"
-                            : idx === 2
-                            ? "Using a public washroom"
-                            : "Describe the situation…"
+                              ? "Shaking hands with a stranger"
+                              : idx === 2
+                                ? "Using a public washroom"
+                                : "Describe the situation…"
                         }
                         className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground/40 focus:outline-none"
                         maxLength={200}
@@ -127,14 +115,6 @@ const LadderBuilder = ({ steps, onStepsChange, onShowExample }: LadderBuilderPro
                     </div>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => removeStep(step.id)}
-                    className="text-muted-foreground/30 hover:text-destructive transition-colors mt-1"
-                    aria-label="Remove step"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
                 </div>
               </div>
             </div>
@@ -142,14 +122,6 @@ const LadderBuilder = ({ steps, onStepsChange, onShowExample }: LadderBuilderPro
         </div>
       </div>
 
-      <button
-        type="button"
-        onClick={addStep}
-        className="flex items-center gap-2 text-sm text-primary hover:text-primary/80 transition-colors ml-6"
-      >
-        <Plus className="w-4 h-4" />
-        Add another step
-      </button>
     </section>
   );
 };

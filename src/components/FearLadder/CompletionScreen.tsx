@@ -1,8 +1,10 @@
 import { DayLog } from "@/hooks/useFearLadderStorage";
+import { LadderStep } from "./LadderBuilder";
 import { useEffect, useState } from "react";
 
 interface CompletionScreenProps {
   logs: DayLog[];
+  steps: LadderStep[];
   onStartNew: () => void;
   onReviewProgress: () => void;
 }
@@ -19,75 +21,87 @@ const ConfettiParticle = ({ delay, left }: { delay: number; left: number }) => (
   />
 );
 
-const CompletionScreen = ({ logs, onStartNew, onReviewProgress }: CompletionScreenProps) => {
+const CompletionScreen = ({ logs, steps, onStartNew, onReviewProgress }: CompletionScreenProps) => {
   const [showConfetti, setShowConfetti] = useState(true);
 
+  // Map step data for easy lookup
+  const stepMap = new Map(steps.map(s => [s.id, s]));
+
+  // Derive steps from logs for the summary ladder (ordered by day)
+  const completedSteps = [...logs].sort((a, b) => a.day - b.day);
+
   useEffect(() => {
-    const timer = setTimeout(() => setShowConfetti(false), 4000);
+    const timer = setTimeout(() => setShowConfetti(false), 5000);
     return () => clearTimeout(timer);
   }, []);
 
-  const avgBefore = logs.length > 0
-    ? Math.round(logs.reduce((sum, l) => sum + l.anxietyBefore, 0) / logs.length)
-    : 0;
-  const avgAfter = logs.length > 0
-    ? Math.round(logs.reduce((sum, l) => sum + l.anxietyAfter, 0) / logs.length)
-    : 0;
-
   return (
-    <div className="flex items-center justify-center min-h-[70vh] relative overflow-hidden">
+    <div className="flex flex-col items-center justify-center min-h-[80vh] relative overflow-hidden py-10">
       {/* Confetti */}
       {showConfetti && (
         <div className="absolute inset-0 pointer-events-none">
-          {Array.from({ length: 20 }).map((_, i) => (
-            <ConfettiParticle key={i} delay={i * 0.15} left={5 + Math.random() * 90} />
+          {Array.from({ length: 30 }).map((_, i) => (
+            <ConfettiParticle key={i} delay={i * 0.1} left={Math.random() * 100} />
           ))}
         </div>
       )}
 
-      <div className="bg-card border border-border rounded-[20px] p-8 md:p-12 text-center max-w-lg w-full shadow-sm space-y-6 relative z-10">
-        <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
-          <span className="text-4xl">🎉</span>
+      <div className="bg-card border border-border rounded-[30px] p-8 md:p-12 text-center max-w-xl w-full shadow-xl space-y-8 relative z-10 mx-4">
+        <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-2">
+          <span className="text-4xl">👑</span>
         </div>
 
         <div className="space-y-3">
-          <h1 className="text-2xl md:text-3xl font-serif font-semibold text-foreground">
-            Congratulations — You Completed Your Fear Ladder
+          <h1 className="text-3xl font-serif font-bold text-foreground">
+            10 Practices Complete
           </h1>
-          <p className="text-sm text-muted-foreground leading-relaxed max-w-md mx-auto">
-            You practiced courage 10 times. You showed up despite discomfort. That is real progress.
+          <p className="text-sm text-muted-foreground leading-relaxed max-w-sm mx-auto">
+            You showed up and faced your fears for 10 straight steps. This is the foundation of courage.
           </p>
         </div>
 
-        {/* Summary */}
-        <div className="grid grid-cols-3 gap-4 py-4">
-          <div className="space-y-1">
-            <p className="text-2xl font-serif font-semibold text-primary">10</p>
-            <p className="text-xs text-muted-foreground">Steps Completed</p>
-          </div>
-          <div className="space-y-1">
-            <p className="text-2xl font-serif font-semibold text-foreground">{avgBefore}</p>
-            <p className="text-xs text-muted-foreground">Avg. Anxiety Before</p>
-          </div>
-          <div className="space-y-1">
-            <p className="text-2xl font-serif font-semibold text-foreground">{avgAfter}</p>
-            <p className="text-xs text-muted-foreground">Avg. Anxiety After</p>
+        {/* Centerpiece */}
+        <div className="bg-therapy-glow rounded-2xl p-6 border border-primary/10">
+          <p className="text-sm font-medium text-primary">
+            You faced all {logs.length} fears on your ladder.
+            <br />
+            <span className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold">Total Mastery</span>
+          </p>
+        </div>
+
+        {/* Final Ladder View */}
+        <div className="space-y-4 text-left">
+          <h3 className="text-sm font-bold text-muted-foreground uppercase tracking-wider px-2">Your Therapeutic Journey</h3>
+          <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar p-1">
+            {completedSteps.map((log, idx) => {
+              const step = stepMap.get(log.stepId);
+              return (
+                <div key={log.stepId} className="flex items-center gap-4 p-4 bg-white/50 rounded-2xl border border-border/60 hover:border-primary/20 transition-colors">
+                  <div className="w-7 h-7 rounded-full bg-primary/20 border border-primary/20 flex items-center justify-center flex-shrink-0">
+                    <span className="text-primary font-black text-[10px]">{idx + 1}</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] font-bold text-foreground leading-tight">
+                      {step?.situation || log.notes || `Practice ${idx + 1}`}
+                    </p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-[10px] font-medium text-muted-foreground">Anxiety: {log.anxietyBefore} → {log.anxietyAfter}</span>
+                      <span className="text-[10px] text-primary/40 font-black">✓</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
 
         {/* Actions */}
-        <div className="flex flex-col gap-3 pt-2">
+        <div className="flex flex-col gap-3 pt-4">
           <button
             onClick={onStartNew}
-            className="w-full py-3 rounded-[20px] text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+            className="w-full py-4 rounded-[20px] text-sm font-bold bg-primary text-primary-foreground hover:bg-primary/90 transition-all shadow-lg shadow-primary/20 active:scale-[0.98]"
           >
-            Start a New Ladder
-          </button>
-          <button
-            onClick={onReviewProgress}
-            className="w-full py-3 rounded-[20px] text-sm font-medium bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors"
-          >
-            Review My Progress
+            Start a New Journey
           </button>
         </div>
       </div>
